@@ -30,7 +30,7 @@ export default class WeztermExecutor {
         "cli",
         "send-text",
         "--no-paste",
-        command + "\n",
+        command + "\r",
       ]);
 
       return {
@@ -64,7 +64,7 @@ export default class WeztermExecutor {
         "--pane-id",
         String(paneId),
         "--no-paste",
-        command + "\n",
+        command + "\r",
       ]);
 
       return {
