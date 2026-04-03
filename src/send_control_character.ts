@@ -1,27 +1,36 @@
-import { exec } from "child_process";
-import { promisify } from "util";
+import { execFile } from "child_process";
 
-const execAsync = promisify(exec);
+function execFileAsync(
+  file: string,
+  args: string[]
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, (error, stdout, stderr) => {
+      if (error) reject(error);
+      else resolve({ stdout, stderr });
+    });
+  });
+}
 
 export default class SendControlCharacter {
-  private weztermCli: string;
+  private weztermBin: string;
 
   constructor() {
-    this.weztermCli = "wezterm cli";
+    this.weztermBin = "wezterm";
   }
 
-  async send(character: string): Promise<{ content: any[] }> {
+  async send(character: string, paneId?: number): Promise<{ content: any[] }> {
     try {
       const controlMap: { [key: string]: string } = {
-        c: "\\x03", // Ctrl+C
-        d: "\\x04", // Ctrl+D
-        z: "\\x1a", // Ctrl+Z
-        l: "\\x0c", // Ctrl+L
-        a: "\\x01", // Ctrl+A
-        e: "\\x05", // Ctrl+E
-        k: "\\x0b", // Ctrl+K
-        u: "\\x15", // Ctrl+U
-        w: "\\x17", // Ctrl+W
+        c: "\x03", // Ctrl+C
+        d: "\x04", // Ctrl+D
+        z: "\x1a", // Ctrl+Z
+        l: "\x0c", // Ctrl+L
+        a: "\x01", // Ctrl+A
+        e: "\x05", // Ctrl+E
+        k: "\x0b", // Ctrl+K
+        u: "\x15", // Ctrl+U
+        w: "\x17", // Ctrl+W
       };
 
       const controlSeq = controlMap[character.toLowerCase()];
@@ -29,13 +38,19 @@ export default class SendControlCharacter {
         throw new Error(`Unknown control character: ${character}`);
       }
 
-      await execAsync(`${this.weztermCli} send-text $'${controlSeq}'`);
+      const args = ["cli", "send-text", "--no-paste"];
+      if (paneId !== undefined) {
+        args.push("--pane-id", String(paneId));
+      }
+      args.push(controlSeq);
+
+      await execFileAsync(this.weztermBin, args);
 
       return {
         content: [
           {
             type: "text",
-            text: `Sent control character: Ctrl+${character.toUpperCase()}`,
+            text: `Sent control character: Ctrl+${character.toUpperCase()}${paneId !== undefined ? ` to pane ${paneId}` : ""}`,
           },
         ],
       };

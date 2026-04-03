@@ -1,26 +1,37 @@
-import { exec } from "child_process";
-import { promisify } from "util";
+import { execFile } from "child_process";
 
-const execAsync = promisify(exec);
+function execFileAsync(
+  file: string,
+  args: string[]
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, (error, stdout, stderr) => {
+      if (error) reject(error);
+      else resolve({ stdout, stderr });
+    });
+  });
+}
 
 export default class WeztermExecutor {
-  private weztermCli: string;
+  private weztermBin: string;
 
   constructor() {
-    this.weztermCli = "wezterm cli";
+    this.weztermBin = "wezterm";
   }
 
   async writeToTerminal(command: string): Promise<{ content: any[] }> {
     try {
-      // 現在のアクティブペインを確認
-      const { stdout: paneInfo } = await execAsync(`${this.weztermCli} list`);
+      const { stdout: paneInfo } = await execFileAsync(this.weztermBin, [
+        "cli",
+        "list",
+      ]);
 
-      // WezTerm CLIを使用してアクティブなペインにテキストを送信
-      // コマンドと改行を一緒に送信して確実に実行
-      const escapedCommand = command.replace(/'/g, "'\"'\"'");
-      await execAsync(
-        `${this.weztermCli} send-text --no-paste '${escapedCommand}\n'`
-      );
+      await execFileAsync(this.weztermBin, [
+        "cli",
+        "send-text",
+        "--no-paste",
+        command + "\n",
+      ]);
 
       return {
         content: [
@@ -47,11 +58,14 @@ export default class WeztermExecutor {
     paneId: number
   ): Promise<{ content: any[] }> {
     try {
-      // 指定されたペインにコマンドを送信
-      const escapedCommand = command.replace(/'/g, "'\"'\"'");
-      await execAsync(
-        `${this.weztermCli} send-text --pane-id ${paneId} --no-paste '${escapedCommand}\n'`
-      );
+      await execFileAsync(this.weztermBin, [
+        "cli",
+        "send-text",
+        "--pane-id",
+        String(paneId),
+        "--no-paste",
+        command + "\n",
+      ]);
 
       return {
         content: [
@@ -75,8 +89,7 @@ export default class WeztermExecutor {
 
   async listPanes(): Promise<{ content: any[] }> {
     try {
-      // 正しいコマンドは 'list' です
-      const { stdout } = await execAsync(`${this.weztermCli} list`);
+      const { stdout } = await execFileAsync(this.weztermBin, ["cli", "list"]);
       return {
         content: [
           {
@@ -99,8 +112,12 @@ export default class WeztermExecutor {
 
   async switchPane(paneId: number): Promise<{ content: any[] }> {
     try {
-      // activate-paneコマンドの正しい形式を使用
-      await execAsync(`${this.weztermCli} activate-pane --pane-id ${paneId}`);
+      await execFileAsync(this.weztermBin, [
+        "cli",
+        "activate-pane",
+        "--pane-id",
+        String(paneId),
+      ]);
       return {
         content: [
           {

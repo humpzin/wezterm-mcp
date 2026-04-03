@@ -1,10 +1,9 @@
-import { exec } from "child_process";
-import { promisify } from "util";
+import { execFile } from "child_process";
 import WeztermExecutor from "../src/wezterm_executor";
 
 // child_processモジュールをモック化
 jest.mock("child_process");
-const mockedExec = jest.mocked(exec);
+const mockedExecFile = jest.mocked(execFile);
 
 describe("WeztermExecutor", () => {
   let executor: WeztermExecutor;
@@ -16,16 +15,17 @@ describe("WeztermExecutor", () => {
 
   describe("writeToTerminal", () => {
     it("正常にコマンドを送信できること", async () => {
-      // モックの設定
       const mockPaneInfo = "pane_id=1 active=true";
-      mockedExec.mockImplementation((command: string, callback: any) => {
-        if (command.includes("list")) {
-          callback(null, { stdout: mockPaneInfo, stderr: "" });
-        } else if (command.includes("send-text")) {
-          callback(null, { stdout: "", stderr: "" });
+      mockedExecFile.mockImplementation(
+        (file: string, args: any, callback: any) => {
+          if (args.includes("list")) {
+            callback(null, mockPaneInfo, "");
+          } else if (args.includes("send-text")) {
+            callback(null, "", "");
+          }
+          return {} as any;
         }
-        return {} as any; // ChildProcessのモック
-      });
+      );
 
       const result = await executor.writeToTerminal('echo "hello"');
 
@@ -37,27 +37,31 @@ describe("WeztermExecutor", () => {
       expect(result.content[0].text).toContain(mockPaneInfo);
     });
 
-    it("特殊文字を含むコマンドを正しくエスケープできること", async () => {
+    it("スペースを含むコマンドが正しく渡されること", async () => {
       const mockPaneInfo = "pane_id=1 active=true";
-      mockedExec.mockImplementation((command: string, callback: any) => {
-        if (command.includes("list")) {
-          callback(null, { stdout: mockPaneInfo, stderr: "" });
-        } else if (command.includes("send-text")) {
-          // エスケープされたコマンドが正しく渡されているかチェック
-          expect(command).toContain("'\"'\"'");
-          callback(null, { stdout: "", stderr: "" });
+      mockedExecFile.mockImplementation(
+        (file: string, args: any, callback: any) => {
+          if (args.includes("list")) {
+            callback(null, mockPaneInfo, "");
+          } else if (args.includes("send-text")) {
+            // execFile uses array args, so spaces are preserved
+            expect(args).toContain("echo hello world\n");
+            callback(null, "", "");
+          }
+          return {} as any;
         }
-        return {} as any; // ChildProcessのモック
-      });
+      );
 
-      await executor.writeToTerminal("echo 'hello world'");
+      await executor.writeToTerminal("echo hello world");
     });
 
     it("エラーが発生した場合にエラーメッセージを返すこと", async () => {
-      mockedExec.mockImplementation((command: string, callback: any) => {
-        callback(new Error("WezTerm not running"), null);
-        return {} as any; // ChildProcessのモック
-      });
+      mockedExecFile.mockImplementation(
+        (file: string, args: any, callback: any) => {
+          callback(new Error("WezTerm not running"), null, null);
+          return {} as any;
+        }
+      );
 
       const result = await executor.writeToTerminal('echo "hello"');
 
@@ -70,11 +74,14 @@ describe("WeztermExecutor", () => {
 
   describe("writeToSpecificPane", () => {
     it("指定されたペインにコマンドを送信できること", async () => {
-      mockedExec.mockImplementation((command: string, callback: any) => {
-        expect(command).toContain("--pane-id 123");
-        callback(null, { stdout: "", stderr: "" });
-        return {} as any; // ChildProcessのモック
-      });
+      mockedExecFile.mockImplementation(
+        (file: string, args: any, callback: any) => {
+          expect(args).toContain("--pane-id");
+          expect(args).toContain("123");
+          callback(null, "", "");
+          return {} as any;
+        }
+      );
 
       const result = await executor.writeToSpecificPane("ls -la", 123);
 
@@ -83,11 +90,33 @@ describe("WeztermExecutor", () => {
       expect(result.content[0].text).toBe("Command sent to pane 123: ls -la");
     });
 
+    it("スペースを含むコマンドが正しくペインに送信されること", async () => {
+      mockedExecFile.mockImplementation(
+        (file: string, args: any, callback: any) => {
+          // The command with spaces should be a single array element
+          expect(args).toContain("echo hello from pane 0\n");
+          callback(null, "", "");
+          return {} as any;
+        }
+      );
+
+      const result = await executor.writeToSpecificPane(
+        "echo hello from pane 0",
+        1
+      );
+
+      expect(result.content[0].text).toBe(
+        "Command sent to pane 1: echo hello from pane 0"
+      );
+    });
+
     it("ペイン指定でエラーが発生した場合にエラーメッセージを返すこと", async () => {
-      mockedExec.mockImplementation((command: string, callback: any) => {
-        callback(new Error("Pane not found"), null);
-        return {} as any; // ChildProcessのモック
-      });
+      mockedExecFile.mockImplementation(
+        (file: string, args: any, callback: any) => {
+          callback(new Error("Pane not found"), null, null);
+          return {} as any;
+        }
+      );
 
       const result = await executor.writeToSpecificPane("ls", 999);
 
@@ -103,11 +132,14 @@ describe("WeztermExecutor", () => {
       const mockPaneList = `pane_id=1 active=true title="Terminal"
 pane_id=2 active=false title="Editor"`;
 
-      mockedExec.mockImplementation((command: string, callback: any) => {
-        expect(command).toContain("wezterm cli list");
-        callback(null, { stdout: mockPaneList, stderr: "" });
-        return {} as any; // ChildProcessのモック
-      });
+      mockedExecFile.mockImplementation(
+        (file: string, args: any, callback: any) => {
+          expect(file).toBe("wezterm");
+          expect(args).toContain("list");
+          callback(null, mockPaneList, "");
+          return {} as any;
+        }
+      );
 
       const result = await executor.listPanes();
 
@@ -117,10 +149,12 @@ pane_id=2 active=false title="Editor"`;
     });
 
     it("ペイン一覧取得でエラーが発生した場合にエラーメッセージを返すこと", async () => {
-      mockedExec.mockImplementation((command: string, callback: any) => {
-        callback(new Error("Connection failed"), null);
-        return {} as any; // ChildProcessのモック
-      });
+      mockedExecFile.mockImplementation(
+        (file: string, args: any, callback: any) => {
+          callback(new Error("Connection failed"), null, null);
+          return {} as any;
+        }
+      );
 
       const result = await executor.listPanes();
 
@@ -133,11 +167,15 @@ pane_id=2 active=false title="Editor"`;
 
   describe("switchPane", () => {
     it("指定されたペインに切り替えできること", async () => {
-      mockedExec.mockImplementation((command: string, callback: any) => {
-        expect(command).toContain("activate-pane --pane-id 42");
-        callback(null, { stdout: "", stderr: "" });
-        return {} as any; // ChildProcessのモック
-      });
+      mockedExecFile.mockImplementation(
+        (file: string, args: any, callback: any) => {
+          expect(args).toContain("activate-pane");
+          expect(args).toContain("--pane-id");
+          expect(args).toContain("42");
+          callback(null, "", "");
+          return {} as any;
+        }
+      );
 
       const result = await executor.switchPane(42);
 
@@ -147,10 +185,12 @@ pane_id=2 active=false title="Editor"`;
     });
 
     it("存在しないペインに切り替えようとした場合にエラーメッセージを返すこと", async () => {
-      mockedExec.mockImplementation((command: string, callback: any) => {
-        callback(new Error("Pane does not exist"), null);
-        return {} as any; // ChildProcessのモック
-      });
+      mockedExecFile.mockImplementation(
+        (file: string, args: any, callback: any) => {
+          callback(new Error("Pane does not exist"), null, null);
+          return {} as any;
+        }
+      );
 
       const result = await executor.switchPane(999);
 

@@ -43,7 +43,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "read_terminal_output",
-        description: "Reads output from the active WezTerm pane",
+        description:
+          "Reads output from a WezTerm pane. Reads the active pane by default, or a specific pane if pane_id is provided",
         inputSchema: {
           type: "object",
           properties: {
@@ -52,18 +53,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description:
                 "Number of lines to read from the terminal (default: 50)",
             },
+            pane_id: {
+              type: "number",
+              description:
+                "ID of the pane to read from. If omitted, reads the active pane",
+            },
           },
         },
       },
       {
         name: "send_control_character",
-        description: "Sends control characters to the active WezTerm pane",
+        description:
+          "Sends control characters to a WezTerm pane. Targets the active pane by default, or a specific pane if pane_id is provided",
         inputSchema: {
           type: "object",
           properties: {
             character: {
               type: "string",
               description: "Control character to send (e.g., 'c' for Ctrl+C)",
+            },
+            pane_id: {
+              type: "number",
+              description:
+                "ID of the pane to send to. If omitted, sends to the active pane",
             },
           },
           required: ["character"],
@@ -124,12 +136,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
     case "write_to_terminal":
       return await executor.writeToTerminal(request.params.arguments.command);
 
-    case "read_terminal_output":
+    case "read_terminal_output": {
       const lines = request.params.arguments.lines || 50;
-      return await outputReader.readOutput(lines);
+      const paneId = request.params.arguments.pane_id;
+      return await outputReader.readOutput(lines, paneId);
+    }
 
     case "send_control_character":
-      return await controlCharSender.send(request.params.arguments.character);
+      return await controlCharSender.send(
+        request.params.arguments.character,
+        request.params.arguments.pane_id
+      );
 
     case "list_panes":
       return await executor.listPanes();
