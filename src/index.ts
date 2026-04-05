@@ -118,6 +118,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "number",
               description: "ID of the pane to write to",
             },
+            tui_mode: {
+              type: "boolean",
+              description:
+                "When true, sends text and CR separately for TUI apps (e.g. Gemini CLI, Claude Code) that don't recognize CR in paste mode. Default: false",
+            },
           },
           required: ["command", "pane_id"],
         },
@@ -157,7 +162,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
     case "write_to_specific_pane":
       return await executor.writeToSpecificPane(
         request.params.arguments.command,
-        request.params.arguments.pane_id
+        request.params.arguments.pane_id,
+        request.params.arguments.tui_mode || false
       );
 
     default:

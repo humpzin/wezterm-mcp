@@ -55,23 +55,44 @@ export default class WeztermExecutor {
 
   async writeToSpecificPane(
     command: string,
-    paneId: number
+    paneId: number,
+    tuiMode: boolean = false
   ): Promise<{ content: any[] }> {
     try {
-      await execFileAsync(this.weztermBin, [
-        "cli",
-        "send-text",
-        "--pane-id",
-        String(paneId),
-        "--no-paste",
-        command + "\r",
-      ]);
+      if (tuiMode) {
+        // Step 1: Send text only (no --no-paste, no \r)
+        await execFileAsync(this.weztermBin, [
+          "cli",
+          "send-text",
+          "--pane-id",
+          String(paneId),
+          command,
+        ]);
+        // Step 2: Send CR separately via --no-paste
+        await execFileAsync(this.weztermBin, [
+          "cli",
+          "send-text",
+          "--pane-id",
+          String(paneId),
+          "--no-paste",
+          "\r",
+        ]);
+      } else {
+        await execFileAsync(this.weztermBin, [
+          "cli",
+          "send-text",
+          "--pane-id",
+          String(paneId),
+          "--no-paste",
+          command + "\r",
+        ]);
+      }
 
       return {
         content: [
           {
             type: "text",
-            text: `Command sent to pane ${paneId}: ${command}`,
+            text: `Command sent to pane ${paneId}${tuiMode ? " (TUI mode)" : ""}: ${command}`,
           },
         ],
       };
